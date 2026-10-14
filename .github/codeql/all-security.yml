@@ -1,0 +1,5 @@
+name: All bundled C# security rules
+disable-default-queries: true
+queries:
+  - uses: ./.github/codeql/all-security.qls
+

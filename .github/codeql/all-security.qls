@@ -1,0 +1,9 @@
+- description: All security-tagged C# alert queries, without precision filtering
+- queries: .
+  from: codeql/csharp-queries
+- include:
+    tags contain: security
+    kind:
+      - problem
+      - path-problem
+

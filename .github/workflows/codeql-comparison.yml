@@ -1,0 +1,91 @@
+name: CodeQL C# mode comparison
+
+on:
+  push:
+    branches: [codeql-mode-comparison]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: csharp / ${{ matrix.build-mode }} / ${{ matrix.suite }}
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        build-mode: [none, autobuild, manual]
+        suite: [default, security-extended, all-security]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.401
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record experiment provenance
+        env:
+          MODE: ${{ matrix.build-mode }}
+          SUITE: ${{ matrix.suite }}
+        run: |
+          New-Item -ItemType Directory -Force results, evidence | Out-Null
+          python .github/codeql/provenance.py
+      - name: Install frontend dependencies
+        if: matrix.build-mode != 'none'
+        run: |
+          npm.cmd ci --prefix LANCommander.UI 2>&1 | Tee-Object evidence/npm-ui.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm.cmd ci --prefix LANCommander.Server 2>&1 | Tee-Object evidence/npm-server.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: csharp
+          build-mode: ${{ matrix.build-mode }}
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-win64.tar.gz
+          config-file: ./.github/codeql/${{ matrix.suite }}.yml
+          dependency-caching: false
+      - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
+        uses: github/codeql-action/autobuild@24c54180a607b1449ed407dd24f251e4e9147c8d
+      - name: Manual full solution build including Razor
+        if: matrix.build-mode == 'manual'
+        run: |
+          $timer = [System.Diagnostics.Stopwatch]::StartNew()
+          dotnet restore LANCommander.slnx 2>&1 | Tee-Object evidence/restore.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build LANCommander.slnx --no-restore --no-incremental --configuration Release -p:UseSharedCompilation=false -v:normal 2>&1 | Tee-Object evidence/build.log
+          $buildExitCode = $LASTEXITCODE
+          $timer.Stop()
+          @{ restore_and_build_seconds = $timer.Elapsed.TotalSeconds; exit_code = $buildExitCode } | ConvertTo-Json | Set-Content evidence/build-timing.json
+          exit $buildExitCode
+      - name: Analyze and retain SARIF
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        with:
+          category: /comparison/csharp/${{ matrix.build-mode }}/${{ matrix.suite }}
+          output: results
+          upload: false
+          upload-database: false
+      - name: Summarize findings
+        run: python .github/codeql/summarize.py results
+      - name: Preserve experiment results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-csharp-${{ matrix.build-mode }}-${{ matrix.suite }}
+          path: |
+            results/
+            evidence/
+          if-no-files-found: error
+          retention-days: 90
