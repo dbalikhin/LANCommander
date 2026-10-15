@@ -1,0 +1,301 @@
+diff --git a/Dotnetarium.Analyzers.Tests/Dotnetarium.Analyzers.Tests.csproj b/Dotnetarium.Analyzers.Tests/Dotnetarium.Analyzers.Tests.csproj
+index c073fb1..b769ce7 100644
+--- a/Dotnetarium.Analyzers.Tests/Dotnetarium.Analyzers.Tests.csproj
++++ b/Dotnetarium.Analyzers.Tests/Dotnetarium.Analyzers.Tests.csproj
+@@ -53,6 +53,7 @@
+     <EmbeddedResource Include="../Dotnetarium.Tool/SarifMetadata.json" LogicalName="Dotnetarium.SarifMetadata.json" />
+     <EmbeddedResource Include="../docs/rules/DNA*.md" LogicalName="Dotnetarium.RuleHelp.%(Filename)%(Extension)" />
+     <Compile Include="../Dotnetarium.Tool/SourceLocationSpan.cs" Link="Tool/SourceLocationSpan.cs" />
++    <Compile Include="../Dotnetarium.Tool/StaticCondition.cs" Link="Tool/StaticCondition.cs" />
+   </ItemGroup>
+ 
+ </Project>
+diff --git a/Dotnetarium.Analyzers.Tests/StaticConditionTests.cs b/Dotnetarium.Analyzers.Tests/StaticConditionTests.cs
+new file mode 100644
+index 0000000..2620a6c
+--- /dev/null
++++ b/Dotnetarium.Analyzers.Tests/StaticConditionTests.cs
+@@ -0,0 +1,49 @@
++using Dotnetarium.Tool;
++
++namespace Dotnetarium.Analyzers.Tests;
++
++public class StaticConditionTests
++{
++    [Theory]
++    [InlineData("'LANCommander.Server' != 'LANCommander.SDK' and 'LANCommander.Server' != 'LANCommander.SDK.SourceGenerators' and 'LANCommander.Server' != 'LANCommander.Steam'", true)]
++    [InlineData("'LANCommander.SDK' != 'LANCommander.SDK' and 'LANCommander.SDK' != 'LANCommander.SDK.SourceGenerators' and 'LANCommander.SDK' != 'LANCommander.Steam'", false)]
++    [InlineData("'LANCommander.Steam' != 'LANCommander.SDK' and 'LANCommander.Steam' != 'LANCommander.SDK.SourceGenerators' and 'LANCommander.Steam' != 'LANCommander.Steam'", false)]
++    [InlineData("true Or false aNd false", true)]
++    [InlineData("(true Or false) aNd false", false)]
++    [InlineData("!('Debug' == 'Release') And ('net8.0' == 'net8.0' Or 'net10.0' == 'net8.0')", true)]
++    [InlineData("'contains and or' == 'CONTAINS AND OR'", true)]
++    [InlineData("\"a\" != \"b\" AND true", true)]
++    [InlineData("'true'", true)]
++    [InlineData("false", false)]
++    public void EvaluatesStaticBooleanExpressions(string expression, bool expected)
++    {
++        Assert.True(StaticCondition.TryEvaluate(expression, out var actual));
++        Assert.Equal(expected, actual);
++    }
++
++    [Theory]
++    [InlineData("true Or Exists('secret.txt')")]
++    [InlineData("false And Exists('secret.txt')")]
++    [InlineData("'$(Unknown)' == '' Or true")]
++    [InlineData("'$([System.IO.File]::ReadAllText(\"secret\"))' != ''")]
++    [InlineData("true And")]
++    [InlineData("Or true")]
++    [InlineData("(true Or false")]
++    [InlineData("true)")]
++    [InlineData("'a' == 'a' garbage")]
++    [InlineData("'a' < 'b'")]
++    [InlineData("'unterminated")]
++    [InlineData("trueandfalse")]
++    [InlineData("")]
++    public void RejectsUnsupportedOrMalformedExpressionsEvenInSkippedBranches(string expression)
++    {
++        Assert.False(StaticCondition.TryEvaluate(expression, out var actual));
++        Assert.False(actual);
++    }
++
++    [Fact]
++    public void RejectsExcessiveNesting()
++    {
++        Assert.False(StaticCondition.TryEvaluate(new string('(', 1000) + "true" + new string(')', 1000), out _));
++    }
++}
+diff --git a/Dotnetarium.Tool/DirectProjectLoader.cs b/Dotnetarium.Tool/DirectProjectLoader.cs
+index 82551e5..f7350f1 100644
+--- a/Dotnetarium.Tool/DirectProjectLoader.cs
++++ b/Dotnetarium.Tool/DirectProjectLoader.cs
+@@ -424,13 +424,7 @@ internal sealed class DirectProjectLoader(ScanReport report, ScanSelection? sele
+         var condition = (string?)element.Attribute("Condition");
+         if (string.IsNullOrWhiteSpace(condition)) return true;
+         var expression = Expand(condition, properties).Trim();
+-        var match = Regex.Match(expression, "^'([^']*)'\\s*(==|!=)\\s*'([^']*)'$");
+-        if (match.Success && !expression.Contains("$(", StringComparison.Ordinal))
+-        {
+-            var equal = match.Groups[1].Value.Equals(match.Groups[3].Value, StringComparison.OrdinalIgnoreCase);
+-            return match.Groups[2].Value == "==" ? equal : !equal;
+-        }
+-        if (bool.TryParse(expression, out var result)) return result;
++        if (StaticCondition.TryEvaluate(expression, out var result)) return result;
+         Warn(project, "condition", $"Unsupported condition; skipped {element.Name.LocalName}: {condition}");
+         return false;
+     }
+diff --git a/Dotnetarium.Tool/StaticCondition.cs b/Dotnetarium.Tool/StaticCondition.cs
+new file mode 100644
+index 0000000..1e83a08
+--- /dev/null
++++ b/Dotnetarium.Tool/StaticCondition.cs
+@@ -0,0 +1,113 @@
++namespace Dotnetarium.Tool;
++
++// A bounded, data-only subset of MSBuild conditions. Never evaluates functions,
++// imports, tasks or targets. Unknown syntax invalidates the whole expression,
++// including branches whose Boolean value would otherwise short-circuit.
++internal static class StaticCondition
++{
++    internal static bool TryEvaluate(string expression, out bool value)
++    {
++        value = false;
++        if (expression.Length > 65536 || expression.Contains("$(", StringComparison.Ordinal)) return false;
++        var parser = new Parser(expression);
++        if (!parser.TryOr(out var result) || !parser.AtEnd) return false;
++        value = result;
++        return true;
++    }
++
++    private sealed class Parser(string text)
++    {
++        private int position;
++        private int depth;
++        internal bool AtEnd { get { WhiteSpace(); return position == text.Length; } }
++
++        internal bool TryOr(out bool value)
++        {
++            if (!TryAnd(out value)) return false;
++            while (TakeWord("or"))
++            {
++                if (!TryAnd(out var right)) return false;
++                value |= right;
++            }
++            return true;
++        }
++
++        private bool TryAnd(out bool value)
++        {
++            if (!TryUnary(out value)) return false;
++            while (TakeWord("and"))
++            {
++                if (!TryUnary(out var right)) return false;
++                value &= right;
++            }
++            return true;
++        }
++
++        private bool TryUnary(out bool value)
++        {
++            value = false;
++            if (++depth > 64) return false;
++            try
++            {
++                if (Take("!"))
++                {
++                    if (!TryUnary(out var inner)) return false;
++                    value = !inner;
++                    return true;
++                }
++                if (Take("(")) return TryOr(out value) && Take(")");
++                if (!Operand(out var left)) return false;
++                var equal = Take("==");
++                if (equal || Take("!="))
++                {
++                    if (!Operand(out var right)) return false;
++                    value = left.Equals(right, StringComparison.OrdinalIgnoreCase) == equal;
++                    return true;
++                }
++                return bool.TryParse(left, out value);
++            }
++            finally { depth--; }
++        }
++
++        private bool Operand(out string value)
++        {
++            WhiteSpace(); value = "";
++            if (position == text.Length) return false;
++            if (text[position] is '\'' or '"')
++            {
++                var quote = text[position++];
++                var end = text.IndexOf(quote, position);
++                if (end < 0) return false;
++                value = text[position..end]; position = end + 1;
++                return true;
++            }
++            var start = position;
++            while (position < text.Length && char.IsLetter(text[position])) position++;
++            value = text[start..position];
++            return bool.TryParse(value, out _);
++        }
++
++        private bool Take(string token)
++        {
++            WhiteSpace();
++            if (!text.AsSpan(position).StartsWith(token, StringComparison.Ordinal)) return false;
++            position += token.Length;
++            return true;
++        }
++
++        private bool TakeWord(string token)
++        {
++            WhiteSpace();
++            if (!text.AsSpan(position).StartsWith(token, StringComparison.OrdinalIgnoreCase)) return false;
++            var end = position + token.Length;
++            if (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) return false;
++            position = end;
++            return true;
++        }
++
++        private void WhiteSpace()
++        {
++            while (position < text.Length && char.IsWhiteSpace(text[position])) position++;
++        }
++    }
++}
+diff --git a/docs/scan-modes.md b/docs/scan-modes.md
+index f361f39..c17fad5 100644
+--- a/docs/scan-modes.md
++++ b/docs/scan-modes.md
+@@ -73,7 +73,8 @@ remain reconstructed; host runtime assemblies are not substituted for missing pa
+ packs are discovered under the .NET installation, `DOTNET_ROOT`, installations
+ on `PATH`, and the NuGet cache (`NUGET_PACKAGES` when set).
+ 
+-The loader reads common properties, straightforward conditions, nearest
++The loader reads common properties, static string equality/inequality conditions
++combined with `And`, `Or`, `!` and parentheses, nearest
+ `Directory.Build.props` and `Directory.Packages.props`, compile includes/removes,
+ project references, explicit assembly references, implicit usings, JSON rules
+ and editor configuration. By default it uses Debug and scans supported target
+diff --git a/tests/NoBuildSmoke/Test-Conditions.ps1 b/tests/NoBuildSmoke/Test-Conditions.ps1
+new file mode 100644
+index 0000000..97222cd
+--- /dev/null
++++ b/tests/NoBuildSmoke/Test-Conditions.ps1
+@@ -0,0 +1,54 @@
++# Reproduce target-framework inheritance from LANCommander's shared props.
++# No restore or build is allowed: both property and item conditions must be read
++# by the default loader, and unsupported branches must remain visible.
++$conditional = Join-Path $scratch 'conditions'
++$app = Join-Path $conditional 'App'
++New-Item -ItemType Directory -Path $app -Force | Out-Null
++@'
++<Project>
++  <PropertyGroup>
++    <TargetFramework Condition="'$(MSBuildProjectName)' != 'LANCommander.SDK' and '$(MSBuildProjectName)' != 'LANCommander.SDK.SourceGenerators' and '$(MSBuildProjectName)' != 'LANCommander.Steam'">net10.0</TargetFramework>
++    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
++  </PropertyGroup>
++</Project>
++'@ | Set-Content -LiteralPath (Join-Path $conditional 'Directory.Build.props')
++$conditionalProject = Join-Path $app 'App.csproj'
++$conditionalXml = @'
++<Project Sdk="Microsoft.NET.Sdk">
++  <ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App" /></ItemGroup>
++  <ItemGroup Condition="'$(Configuration)' == 'Debug' And ('$(Platform)' == 'AnyCPU' Or false)">
++    <Compile Include="Unsafe.cs" />
++  </ItemGroup>
++  <ItemGroup Condition="!('$(Configuration)' == 'Debug')">
++    <Compile Include="Safe.cs" />
++  </ItemGroup>
++</Project>
++'@
++$conditionalXml | Set-Content -LiteralPath $conditionalProject
++@'
++using System.Diagnostics;
++using Microsoft.AspNetCore.Mvc;
++public class Entry : Controller {
++    public void Unsafe(string command) => Process.Start(command);
++}
++'@ | Set-Content -LiteralPath (Join-Path $app 'Unsafe.cs')
++@'
++using System.Diagnostics;
++using Microsoft.AspNetCore.Mvc;
++public class Entry : Controller {
++    public void Safe(string command) => Process.Start("fixed");
++}
++'@ | Set-Content -LiteralPath (Join-Path $app 'Safe.cs')
++$inherited = Scan $conditionalProject @()
++AssertFinding $inherited
++AssertMode $inherited 'no-build' 'available'
++if (HasNotice $inherited 'condition') { throw 'Supported compound props/item conditions were skipped.' }
++$release = Scan $conditionalProject @('--configuration', 'Release')
++AssertMode $release 'no-build' 'available'
++if (@($release.results | Where-Object ruleId -ne 'DNA9000').Count) { throw 'False item condition included the unsafe source.' }
++$invalidXml = $conditionalXml.Replace('</Project>', '<PropertyGroup><DefineConstants Condition="true Or Exists(''marker.txt'')">UNSUPPORTED</DefineConstants></PropertyGroup></Project>')
++$invalidXml | Set-Content -LiteralPath $conditionalProject
++$unsupportedCondition = Scan $conditionalProject @()
++AssertFinding $unsupportedCondition
++if (-not (HasNotice $unsupportedCondition 'condition')) { throw 'Unsupported syntax in a short-circuited branch was hidden.' }
++if (Test-Path -LiteralPath (Join-Path $app 'obj')) { throw 'No-build condition evaluation created build/restore outputs.' }
+diff --git a/tests/NoBuildSmoke/Test.ps1 b/tests/NoBuildSmoke/Test.ps1
+index fe616b2..1f1d9df 100644
+--- a/tests/NoBuildSmoke/Test.ps1
++++ b/tests/NoBuildSmoke/Test.ps1
+@@ -1,4 +1,4 @@
+-param([string]$ToolDll, [string]$ToolPackage, [switch]$BudgetsOnly, [switch]$ReferencesOnly, [switch]$BlazorOnly)
++param([string]$ToolDll, [string]$ToolPackage, [switch]$BudgetsOnly, [switch]$ReferencesOnly, [switch]$BlazorOnly, [switch]$ConditionsOnly)
+ $ErrorActionPreference = 'Stop'
+ $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+ if (-not $ToolDll) { $ToolDll = Join-Path $root 'Dotnetarium.Tool/bin/Release/net10.0/Dotnetarium.Tool.dll' }
+@@ -51,6 +51,11 @@ function AssertMode($Run, [string]$Mode, [string]$InputStatus) {
+ function HasNotice($Run, [string]$Id) {
+     return @($Run.invocations[0].toolExecutionNotifications | Where-Object { $_.descriptor.id -eq $Id }).Count -gt 0
+ }
++. (Join-Path $PSScriptRoot 'Test-Conditions.ps1')
++if ($ConditionsOnly) {
++    "No-build condition checks passed. Reports: $scratch"
++    exit 0
++}
+ if ($BlazorOnly) {
+     . (Join-Path $PSScriptRoot 'Test-BlazorUsings.ps1')
+     "No-build Blazor using checks passed. Reports: $scratch"

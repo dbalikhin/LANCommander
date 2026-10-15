@@ -1,0 +1,118 @@
+name: Default no-build loader fix end-to-end
+on:
+  push:
+    branches: [no-build-condition-e2e]
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DNA_TARGET: LANCommander.slnx
+      DNA_VERSION: '2.7.0'
+      DNA_SETUP: 'false'
+      DNA_RESTORE: 'true'
+      DNA_PROJECT: 'false'
+      DNA_UPLOAD: 'true'
+      DNA_CONFIG: ''
+      DNA_CONFIGURATION: Debug
+      DNA_FRAMEWORK: net10.0
+      DNA_SARIF: fixed-default-no-build.sarif
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Checkout scanner source baseline
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: dotnetarium/dotnetarium
+          ref: 82b09f9fe773eadb052dd4462dd42c12c6de80d2
+          path: .dna-cli-src
+          persist-credentials: false
+      - name: Checkout official Action scripts
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: dotnetarium/dotnetarium-action
+          ref: 8e63bfc79a99d11f07f39331709534fec013d82e
+          path: .dna-action
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.401
+      - name: Build staged scanner with loader fix
+        shell: bash
+        run: |
+          git -C .dna-cli-src apply --check ../.github/benchmark/no-build-condition-fix.patch
+          git -C .dna-cli-src apply ../.github/benchmark/no-build-condition-fix.patch
+          dotnet pack .dna-cli-src/Dotnetarium.Tool/Dotnetarium.Tool.csproj -c Release -p:RunAnalyzers=false -o "$RUNNER_TEMP/fixed-cli-feed" --nologo
+      - name: Validate official Action inputs
+        id: prepare
+        shell: pwsh
+        run: '& ./.dna-action/scripts/Prepare.ps1'
+      - name: Install staged package instead of the affected published package
+        shell: pwsh
+        env:
+          DNA_TOOL: ${{ steps.prepare.outputs.tool-directory }}
+        run: |
+          $feed = Join-Path $env:RUNNER_TEMP 'fixed-cli-feed'
+          $config = Join-Path $env:RUNNER_TEMP 'fixed-cli-nuget.config'
+          "<configuration><packageSources><clear/><add key=`"staged`" value=`"$feed`"/></packageSources></configuration>" | Set-Content $config
+          $previous = $env:NUGET_PACKAGES
+          try {
+            $env:NUGET_PACKAGES = Join-Path $env:RUNNER_TEMP 'fixed-cli-cache'
+            dotnet tool install dotnetarium --version 2.7.0 --tool-path $env:DNA_TOOL --configfile $config --no-cache
+            if ($LASTEXITCODE -ne 0) { throw 'Staged package installation failed' }
+          } finally { $env:NUGET_PACKAGES = $previous }
+      - name: Restore through the official Action script
+        shell: pwsh
+        env:
+          DNA_TARGET: ${{ steps.prepare.outputs.target }}
+        run: '& ./.dna-action/scripts/Restore.ps1'
+      - name: Scan with default no-build through official Action script
+        id: scan
+        shell: pwsh
+        env:
+          DNA_TARGET: ${{ steps.prepare.outputs.target }}
+          DNA_TOOL: ${{ steps.prepare.outputs.tool-directory }}
+          DNA_SARIF: ${{ steps.prepare.outputs.sarif-file }}
+        run: '& ./.dna-action/scripts/Scan.ps1'
+      - name: Assert default loader and expected end-to-end anchors
+        shell: python
+        env:
+          SCAN_EXIT: ${{ steps.scan.outputs.exit-code }}
+        run: |
+          import json,os,pathlib
+          run=json.loads(pathlib.Path('fixed-default-no-build.sarif').read_text())['runs'][0]
+          props=run['invocations'][0]['properties']
+          assert os.environ['SCAN_EXIT']=='0'
+          assert props['dotnetarium.loadingMode']=='no-build'
+          rows=[r for r in run['results'] if r['ruleId']!='DNA9000']
+          projects=props['dotnetarium.analysisSettings']
+          anchors={pathlib.PurePosixPath(r['locations'][0]['physicalLocation']['artifactLocation']['uri']).name for r in rows}
+          if os.environ['GITHUB_REPOSITORY'].endswith('/LANCommander'):
+            assert len(projects)>=22, len(projects)
+            assert {'ServerImporter.cs','ServerController.cs','DownloadEndpoints.cs','Cors.cs','ExternalLogin.cshtml.cs','Login.cshtml.cs'}<=anchors,anchors
+          else:
+            assert len(rows)==42, len(rows)
+            assert {'PathTraversalController.cs','XxeInjectionController.cs','Program.cs','VulnerableDatabaseService.cs'}<=anchors,anchors
+          assert any(r.get('codeFlows') for r in rows)
+          print(f'Default no-build E2E passed: {len(projects)} compilations; {len(rows)} findings; code flows present')
+      - name: Upload fixed default no-build SARIF to Code Security
+        if: ${{ !cancelled() && steps.scan.outputs.sarif-ready == 'true' }}
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d
+        with:
+          sarif_file: fixed-default-no-build.sarif
+          category: dotnetarium-staged-condition-fix-default-no-build
+      - name: Preserve fixed scanner results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixed-default-no-build-e2e
+          path: fixed-default-no-build.sarif
+          if-no-files-found: warn
