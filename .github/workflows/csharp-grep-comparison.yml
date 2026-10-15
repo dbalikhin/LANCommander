@@ -1,0 +1,50 @@
+name: C# security OpenGrep and Semgrep comparison
+
+on:
+  push:
+    branches: [csharp-grep-comparison]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: csharp / ${{ matrix.engine }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [opengrep, semgrep-ce, semgrep-pro]
+    env:
+      ENGINE: ${{ matrix.engine }}
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+      SEMGREP_SEND_METRICS: 'off'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Prepare security-only C# rules and scanner
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: |
+          python -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
+          python .github/grep/benchmark.py prepare
+      - name: Scan C# security three times
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: python .github/grep/benchmark.py scan
+      - name: Preserve findings, coverage and timing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csharp-security-${{ matrix.engine }}
+          path: |
+            results/
+            evidence/
+          if-no-files-found: error
+          retention-days: 90
