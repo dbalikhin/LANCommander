@@ -79,7 +79,7 @@ def prepare():
         from semgrep.state import get_state
         from semgrep.config_resolver import ConfigLoader
         context=click.Context(cli);context.__enter__()
-        state=get_state();state.app_session.authenticate();assert get_state() is state
+        auth_state=get_state();auth_state.app_session.authenticate();assert get_state() is auth_state
         configs=ConfigLoader('policy',project_url='https://github.com/'+os.environ['GITHUB_REPOSITORY']).load_config()
         pro=[];policy_selected=0
         for config in configs:
