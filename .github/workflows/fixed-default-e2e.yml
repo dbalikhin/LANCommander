@@ -50,7 +50,8 @@ jobs:
         run: |
           git -C .dna-cli-src apply --check ../.github/benchmark/no-build-condition-fix.patch
           git -C .dna-cli-src apply ../.github/benchmark/no-build-condition-fix.patch
-          dotnet pack .dna-cli-src/Dotnetarium.Tool/Dotnetarium.Tool.csproj -c Release -p:RunAnalyzers=false -o "$RUNNER_TEMP/fixed-cli-feed" --nologo
+          cp -a .dna-cli-src "$RUNNER_TEMP/fixed-scanner-source"
+          dotnet pack "$RUNNER_TEMP/fixed-scanner-source/Dotnetarium.Tool/Dotnetarium.Tool.csproj" -c Release -p:RunAnalyzers=false -o "$RUNNER_TEMP/fixed-cli-feed" --nologo
       - name: Validate official Action inputs
         id: prepare
         shell: pwsh
