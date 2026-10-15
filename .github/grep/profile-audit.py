@@ -1,5 +1,7 @@
 import collections,datetime,hashlib,json,os,pathlib,statistics,subprocess,sys,time
 import yaml
+import click
+from semgrep.cli import cli
 from semgrep.config_resolver import ConfigLoader
 from semgrep.state import get_state
 
@@ -11,8 +13,13 @@ def capture(args,log):
     t=time.perf_counter()
     with log.open('w',encoding='utf-8') as f:p=subprocess.run(args,stdout=f,stderr=subprocess.STDOUT)
     return p.returncode,round(time.perf_counter()-t,6)
+# Retain the Click context for the entire helper process, just as the CLI does.
+# Without it, repeated get_state() calls can create fresh unauthenticated sessions.
+cli_context=click.Context(cli)
+cli_context.__enter__()
 state=get_state();state.app_session.authenticate()
-inventory=dict(profile=profile,config=config,authenticated=state.app_session.is_authenticated,cli_version='1.181.0',repo=os.environ['GITHUB_REPOSITORY'],commit=os.environ['GITHUB_SHA'],downloaded_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+assert get_state() is state, 'Semgrep authentication state must persist across config loader calls'
+inventory=dict(profile=profile,config=config,authenticated=state.app_session.is_authenticated,state_identity_stable=(get_state() is state),cli_version='1.181.0',repo=os.environ['GITHUB_REPOSITORY'],commit=os.environ['GITHUB_SHA'],downloaded_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
 try:
     loaded=ConfigLoader(config,project_url='https://github.com/'+os.environ['GITHUB_REPOSITORY']).load_config()
 except Exception as ex:
