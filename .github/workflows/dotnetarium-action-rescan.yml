@@ -1,0 +1,75 @@
+name: Dotnetarium official action rescan
+on:
+  push:
+    branches: [dotnetarium-action-rescan]
+  workflow_dispatch:
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+jobs:
+  scan:
+    name: dotnetarium-2.7.0 / ${{ matrix.mode }} / ${{ matrix.profile }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [nb, project]
+        profile: [default, full, max]
+    env:
+      TARGET: LANCommander.slnx
+      BASELINE: 92e30cc90b9910d8bd2fefe5e82d9361fb229d36
+      MODE: ${{ matrix.mode }}
+      PROFILE: ${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Confirm application baseline and start scanner observer
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASELINE"
+          git diff --exit-code "$BASELINE" HEAD -- . ':(exclude).github'
+          mkdir -p action-evidence
+          git rev-parse HEAD > action-evidence/workflow-commit.txt
+          git diff --stat "$BASELINE" HEAD > action-evidence/changes-from-baseline.txt
+          nohup python -u .github/benchmark/observe-scanner.py > action-evidence/observer.log 2>&1 < /dev/null &
+          python -c "import pathlib,time; p=pathlib.Path('action-evidence/observer-ready'); deadline=time.monotonic()+10; exec('while not p.exists() and time.monotonic()<deadline: time.sleep(0.05)'); assert p.exists()"
+      - name: Scan with official Dotnetarium action
+        id: scan
+        uses: dotnetarium/dotnetarium-action@8e63bfc79a99d11f07f39331709534fec013d82e
+        with:
+          target: ${{ env.TARGET }}
+          version: '2.7.0'
+          dotnet-version: |
+            8.0.x
+            10.0.401
+          project-mode: ${{ matrix.mode == 'project' && 'true' || 'false' }}
+          config: .github/dotnetarium-action/${{ matrix.profile }}.json
+          configuration: Debug
+          framework: net10.0
+          sarif-file: dotnetarium-action-results.sarif
+          upload-sarif: 'true'
+          category: dotnetarium-action-2.7.0-${{ matrix.mode }}-${{ matrix.profile }}
+      - name: Preserve scan outputs and process timing
+        if: always()
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings }}
+          INPUT_STATUS: ${{ steps.scan.outputs.input-status }}
+          ANALYSIS_STATUS: ${{ steps.scan.outputs.analysis-status }}
+        run: |
+          touch action-evidence/observer-stop
+          python -c "import time; time.sleep(0.2)"
+          python .github/benchmark/summarize-action.py
+      - name: Upload scan evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnetarium-action-${{ matrix.mode }}-${{ matrix.profile }}
+          path: |
+            dotnetarium-action-results.sarif
+            action-evidence/
+          retention-days: 90
+          if-no-files-found: error
