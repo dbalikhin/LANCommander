@@ -1,0 +1,43 @@
+name: Expanded public C# security rules comparison
+on:
+  push:
+    branches: [expanded-community-security]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    name: expanded-csharp / ${{ matrix.engine }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [semgrep-ce, opengrep]
+    env:
+      ENGINE: ${{ matrix.engine }}
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+      SEMGREP_SEND_METRICS: 'off'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Prepare expanded public C# security rules
+        run: |
+          python -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
+          python .github/grep/expanded-benchmark.py prepare
+      - name: Scan three times
+        run: python .github/grep/expanded-benchmark.py scan
+      - name: Preserve evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expanded-csharp-${{ matrix.engine }}
+          path: |
+            results/
+            evidence/
+          retention-days: 90
+          if-no-files-found: error
