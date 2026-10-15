@@ -82,7 +82,8 @@ def scan():
     runs=[]
     for i in range(1,4):
         result=RESULTS/f'run-{i}.json'
-        args=[state['executable'],'scan','--config',state['rules_dir'],'--include','*.cs','--no-git-ignore','--exclude','results','--exclude','evidence','--metrics','off','--disable-version-check','--jobs','2','--timeout','120','--max-target-bytes','0','--json','--output',str(result),'--sarif-output',str(RESULTS/f'run-{i}.sarif'),'--time']
+        args=[state['executable'],'scan','--config',state['rules_dir'],'--include','*.cs','--no-git-ignore','--exclude','results','--exclude','evidence','--disable-version-check','--jobs','2','--timeout','120','--max-target-bytes','0','--json','--output',str(result),'--sarif-output',str(RESULTS/f'run-{i}.sarif'),'--time']
+        if ENGINE!='opengrep':args.extend(['--metrics','off'])
         if ENGINE=='semgrep-ce':args.append('--oss-only')
         if ENGINE=='semgrep-pro':args.append('--pro')
         args.append('.')
