@@ -94,7 +94,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           $timer = [Diagnostics.Stopwatch]::StartNew()
-          & "$env:RUNNER_TEMP/sonar-scanner/dotnet-sonarscanner" begin /k:"$env:SONAR_PROJECT_KEY" /o:dbalikhin /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$env:SONAR_TOKEN" /v:"compiled-$env:GITHUB_RUN_ID" /d:sonar.test.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.scm.revision="$env:COMPARISON_COMMIT" /d:sonar.scanner.scanAll=false /d:sonar.sca.enabled=false /d:sonar.cs.analyzeRazorCode=true /d:sonar.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.exclusions="**/node_modules/**,**/bin/**,**/obj/**"
+          & "$env:RUNNER_TEMP/sonar-scanner/dotnet-sonarscanner" begin /k:"$env:SONAR_PROJECT_KEY" /o:dbalikhin /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$env:SONAR_TOKEN" /v:"compiled-$env:GITHUB_RUN_ID" /d:sonar.test.exclusions="**/*.js,**/*.jsx,**/*.ts,**/*.tsx,**/*.json,**/*.xml,**/*.yml,**/*.yaml,**/*.ps1,**/*.sh,**/*.bat,**/*.cmd,**/Dockerfile,**/*.dockerfile,**/*.css,**/*.scss,**/*.less,**/*.html,**/*.c,**/*.cpp,**/*.h" /d:sonar.scm.revision="$env:COMPARISON_COMMIT" /d:sonar.scanner.scanAll=false /d:sonar.sca.enabled=false /d:sonar.cs.analyzeRazorCode=true /d:sonar.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.exclusions="**/node_modules/**,**/bin/**,**/obj/**"
           $scanExit = $LASTEXITCODE
           @{ begin_seconds = $timer.Elapsed.TotalSeconds } | ConvertTo-Json | Set-Content sonar-artifacts/compiled/timing-begin.json
           exit $scanExit

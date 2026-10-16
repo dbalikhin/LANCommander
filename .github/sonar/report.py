@@ -173,6 +173,8 @@ def export(processing, commit, timings):
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
         stream.write(text)
     print(json.dumps(summary))
+    if MODE == "collect" and count == 0:
+        raise RuntimeError("Compiled scan measured zero main C# lines; coverage validation failed.")
 
 
 try:
