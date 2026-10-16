@@ -75,8 +75,13 @@ if sys.argv[1] == "preflight":
         result = api("qualityprofiles/activate_rules", {**filters, **selection, "targetKey": profile["key"]}, post=True)
         if result.get("errors"):
             raise RuntimeError(f"Rule activation failed: {result['errors']}")
-    active = pages("rules/search", {"organization": "dbalikhin", "qprofile": profile["key"], "activation": "true"}, "rules")
-    active_keys = {rule["key"] for rule in active}
+    # Rule-search indexing can lag behind successful activation.
+    for attempt in range(12):
+        active = pages("rules/search", {"organization": "dbalikhin", "qprofile": profile["key"], "activation": "true"}, "rules")
+        active_keys = {rule["key"] for rule in active}
+        if active_keys == set(expected):
+            break
+        time.sleep(5)
     if active_keys != set(expected):
         raise RuntimeError(f"Security profile mismatch: missing={sorted(set(expected) - active_keys)}, extra={sorted(active_keys - set(expected))}")
     api("qualityprofiles/add_project", {"organization": "dbalikhin", "project": PROJECT,
