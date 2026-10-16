@@ -1,6 +1,6 @@
 param([switch]$Restore)
 $ErrorActionPreference = 'Stop'
-$repoName = ($env:GITHUB_REPOSITORY -split '/')[1]
+$repoName = (($env:SONAR_TARGET_REPOSITORY ?? $env:GITHUB_REPOSITORY) -split '/')[1]
 $solution = $env:SONAR_SOLUTION
 if ($repoName -eq 'Remotely') {
     # Docker Compose is not a C# project. Include every valid C# project, plus

@@ -1,0 +1,138 @@
+name: Sonar vulnerable app via shared credential
+
+on:
+  workflow_dispatch:
+    inputs:
+      automatic_commit:
+        description: 'Metadata-only trigger commit in the vulnerable app fork'
+        required: true
+      source_commit:
+        description: 'Source commit before the automatic trigger'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-vulnerable-app-comparison
+  cancel-in-progress: false
+
+env:
+  SONAR_PROJECT_KEY: dbalikhin_the-most-vulnerable-dotnet-app
+  SONAR_TARGET_REPOSITORY: dbalikhin/the-most-vulnerable-dotnet-app
+  SONAR_SOURCE_COMMIT: ${{ inputs.source_commit }}
+  SONAR_AUTOMATIC_COMMIT: ${{ inputs.automatic_commit }}
+  SONAR_SOLUTION: DotnetSecurityFailures.slnx
+
+jobs:
+  compare:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: source
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: dbalikhin/the-most-vulnerable-dotnet-app
+          ref: ${{ inputs.source_commit }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use shared comparison scripts
+        run: |
+          Copy-Item ../tooling/.github/sonar/report.py .github/sonar/report.py -Force
+          Copy-Item ../tooling/.github/sonar/build.ps1 .github/sonar/build.ps1 -Force
+      - name: Scan with Cloud Automatic Analysis (no user build)
+        id: automatic
+        timeout-minutes: 40
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/sonar/report.py automatic-external
+      - name: Preserve automatic findings before compiled analysis
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sonar-automatic-csharp
+          path: source/sonar-artifacts/automatic/
+          retention-days: 14
+      - name: Use the same source revision for the compiled scan
+        run: |
+          $commit = $env:GITHUB_SHA
+          if (Test-Path sonar-artifacts/automatic/trigger.json) {
+            $commit = (Get-Content sonar-artifacts/automatic/trigger.json -Raw | ConvertFrom-Json).commit
+            git fetch origin $commit
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git checkout --detach $commit
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Copy-Item ../tooling/.github/sonar/report.py .github/sonar/report.py -Force
+          Copy-Item ../tooling/.github/sonar/build.ps1 .github/sonar/build.ps1 -Force
+          "COMPARISON_COMMIT=$commit" | Out-File $env:GITHUB_ENV -Append
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.401
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '20'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Select compiled analysis with the identical security profile
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          python .github/sonar/report.py preflight
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $before = Get-Content sonar-artifacts/automatic/source-manifest.json -Raw
+          $after = Get-Content sonar-artifacts/compiled/source-manifest.json -Raw
+          if ($before -ne $after) { throw 'C# source/build files changed between scan modes.' }
+      - name: Install SonarScanner for .NET 12.0.0
+        run: dotnet tool install dotnet-sonarscanner --version 12.0.0 --tool-path "$env:RUNNER_TEMP/sonar-scanner"
+      - name: Restore build dependencies
+        run: ./.github/sonar/build.ps1 -Restore
+      - name: Begin full C# and Razor security analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          & "$env:RUNNER_TEMP/sonar-scanner/dotnet-sonarscanner" begin /k:"$env:SONAR_PROJECT_KEY" /o:dbalikhin /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.scm.revision="$env:COMPARISON_COMMIT" /d:sonar.scanner.scanAll=false /d:sonar.sca.enabled=false /d:sonar.cs.analyzeRazorCode=true /d:sonar.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.exclusions="**/node_modules/**,**/bin/**,**/obj/**"
+          $scanExit = $LASTEXITCODE
+          @{ begin_seconds = $timer.Elapsed.TotalSeconds } | ConvertTo-Json | Set-Content sonar-artifacts/compiled/timing-begin.json
+          exit $scanExit
+      - name: Build all C# projects with security analyzers
+        run: ./.github/sonar/build.ps1
+      - name: Submit compiled analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          $timer = [Diagnostics.Stopwatch]::StartNew()
+          & "$env:RUNNER_TEMP/sonar-scanner/dotnet-sonarscanner" end /d:sonar.token="$env:SONAR_TOKEN"
+          $scanExit = $LASTEXITCODE
+          @{ end_and_upload_seconds = $timer.Elapsed.TotalSeconds; scanner_exit_code = $scanExit } | ConvertTo-Json | Set-Content sonar-artifacts/compiled/timing-end.json
+          exit $scanExit
+      - name: Export indexed security findings and timings
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: python .github/sonar/report.py collect
+      - name: Preserve compiled reports and build evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sonar-compiled-csharp
+          path: source/sonar-artifacts/compiled/
+          if-no-files-found: warn
+          retention-days: 14
