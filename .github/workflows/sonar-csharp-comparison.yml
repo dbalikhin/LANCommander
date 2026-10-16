@@ -2,6 +2,12 @@ name: Sonar C# automatic vs compiled
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Both modes, or a compiled-only rescan without changing automatic-analysis state'
+        type: choice
+        options: [both, compiled]
+        default: both
 
 permissions:
   contents: read
@@ -30,6 +36,7 @@ jobs:
           persist-credentials: false
       - name: Scan with Cloud Automatic Analysis (no user build)
         id: automatic
+        if: ${{ inputs.mode != 'compiled' }}
         timeout-minutes: 40
         continue-on-error: true
         env:
@@ -37,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python .github/sonar/report.py automatic
       - name: Preserve automatic findings before compiled analysis
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && inputs.mode != 'compiled' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sonar-automatic-csharp
@@ -73,9 +80,11 @@ jobs:
         run: |
           python .github/sonar/report.py preflight
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $before = Get-Content sonar-artifacts/automatic/source-manifest.json -Raw
-          $after = Get-Content sonar-artifacts/compiled/source-manifest.json -Raw
-          if ($before -ne $after) { throw 'C# source/build files changed between scan modes.' }
+          if (Test-Path sonar-artifacts/automatic/source-manifest.json) {
+            $before = Get-Content sonar-artifacts/automatic/source-manifest.json -Raw
+            $after = Get-Content sonar-artifacts/compiled/source-manifest.json -Raw
+            if ($before -ne $after) { throw 'C# source/build files changed between scan modes.' }
+          }
       - name: Install SonarScanner for .NET 12.0.0
         run: dotnet tool install dotnet-sonarscanner --version 12.0.0 --tool-path "$env:RUNNER_TEMP/sonar-scanner"
       - name: Restore build dependencies
@@ -85,7 +94,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           $timer = [Diagnostics.Stopwatch]::StartNew()
-          & "$env:RUNNER_TEMP/sonar-scanner/dotnet-sonarscanner" begin /k:"$env:SONAR_PROJECT_KEY" /o:dbalikhin /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$env:SONAR_TOKEN" /d:sonar.scm.revision="$env:COMPARISON_COMMIT" /d:sonar.scanner.scanAll=false /d:sonar.sca.enabled=false /d:sonar.cs.analyzeRazorCode=true /d:sonar.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.exclusions="**/node_modules/**,**/bin/**,**/obj/**"
+          & "$env:RUNNER_TEMP/sonar-scanner/dotnet-sonarscanner" begin /k:"$env:SONAR_PROJECT_KEY" /o:dbalikhin /d:sonar.host.url=https://sonarcloud.io /d:sonar.token="$env:SONAR_TOKEN" /v:"compiled-$env:GITHUB_RUN_ID" /d:sonar.test.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.scm.revision="$env:COMPARISON_COMMIT" /d:sonar.scanner.scanAll=false /d:sonar.sca.enabled=false /d:sonar.cs.analyzeRazorCode=true /d:sonar.inclusions="**/*.cs,**/*.cshtml,**/*.razor" /d:sonar.exclusions="**/node_modules/**,**/bin/**,**/obj/**"
           $scanExit = $LASTEXITCODE
           @{ begin_seconds = $timer.Elapsed.TotalSeconds } | ConvertTo-Json | Set-Content sonar-artifacts/compiled/timing-begin.json
           exit $scanExit
