@@ -1,0 +1,21 @@
+name: SARIF suppression transport probe
+on:
+  push:
+    branches: [test/sarif-suppressions-20261016]
+    paths:
+      - .github/dotnetarium-suppression-probe/**
+      - .github/workflows/sarif-suppression-probe.yml
+permissions:
+  contents: read
+  security-events: write
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Upload isolated synthetic results
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: .github/dotnetarium-suppression-probe/results.sarif
+          category: dotnetarium-suppression-transport-probe
+          wait-for-processing: true

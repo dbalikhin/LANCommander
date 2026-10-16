@@ -1,0 +1,426 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Dotnetarium SARIF suppression probe",
+          "version": "1.0.0",
+          "informationUri": "https://github.com/dotnetarium/dotnetarium",
+          "rules": [
+            {
+              "id": "PROBE_CONTROL",
+              "name": "PROBE_CONTROL",
+              "shortDescription": {
+                "text": "Unsuppressed native fingerprint control"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            },
+            {
+              "id": "PROBE_EXTERNAL_ACCEPTED",
+              "name": "PROBE_EXTERNAL_ACCEPTED",
+              "shortDescription": {
+                "text": "External accepted suppression"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            },
+            {
+              "id": "PROBE_SOURCE_ACCEPTED",
+              "name": "PROBE_SOURCE_ACCEPTED",
+              "shortDescription": {
+                "text": "In-source accepted suppression"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            },
+            {
+              "id": "PROBE_EXTERNAL_UNDER_REVIEW",
+              "name": "PROBE_EXTERNAL_UNDER_REVIEW",
+              "shortDescription": {
+                "text": "External pending suppression"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            },
+            {
+              "id": "PROBE_EXTERNAL_REJECTED",
+              "name": "PROBE_EXTERNAL_REJECTED",
+              "shortDescription": {
+                "text": "External rejected suppression"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            },
+            {
+              "id": "PROBE_EXTERNAL_NO_STATUS",
+              "name": "PROBE_EXTERNAL_NO_STATUS",
+              "shortDescription": {
+                "text": "External suppression without status"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            },
+            {
+              "id": "PROBE_UPLOADER_CONTROL",
+              "name": "PROBE_UPLOADER_CONTROL",
+              "shortDescription": {
+                "text": "Unsuppressed uploader fingerprint control"
+              },
+              "fullDescription": {
+                "text": "ECB encryption reveals repeated plaintext blocks. A mode assignment or cipher selection may also be used only for legacy decryption."
+              },
+              "helpUri": "https://github.com/dotnetarium/dotnetarium/blob/main/docs/rules/DNA0014.md",
+              "help": {
+                "text": "DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\nRecommendation\r\n\r\nUse authenticated encryption, such as AesGcm, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports EncryptEcb, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\nReferences\r\n\r\n- CWE-327: Risky cryptographic algorithm (https://cwe.mitre.org/data/definitions/327.html)",
+                "markdown": "# DNA0014: ECB mode use\r\n\r\nElectronic Codebook (ECB) encrypts identical plaintext blocks to identical ciphertext blocks under the same key. Repeated structure remains visible in the encrypted data, so using a strong cipher such as AES does not make ECB appropriate for general message encryption.\r\n\r\n## Recommendation\r\n\r\nUse authenticated encryption, such as `AesGcm`, for new data. The stored or transmitted format must include the nonce and authentication tag needed by the receiver. Simply changing an ECB setting to CBC does not provide message authentication.\r\n\r\nThe rule reports `EncryptEcb`, ECB mode assignments, supported Bouncy Castle selections and Godot AES ECB encryption. An explicit encryption call is evidence of encryption; a mode assignment or cipher selection can also belong to a legacy decryption path. Review that distinction before changing an existing data format.\r\n\r\nIf ECB is required only to read old data, isolate that compatibility code and avoid using it for new writes.\r\n\r\n## References\r\n\r\n- [CWE-327: Risky cryptographic algorithm](https://cwe.mitre.org/data/definitions/327.html)\r\n"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "security-severity": "7.5",
+                "precision": "medium",
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-327"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "originalUriBaseIds": {
+        "%SRCROOT%": {
+          "uri": "file:///home/runner/work/LANCommander/LANCommander/"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "PROBE_CONTROL",
+          "ruleIndex": 0,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: Unsuppressed native fingerprint control."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "d51d9197b8a79921:1"
+          }
+        },
+        {
+          "ruleId": "PROBE_EXTERNAL_ACCEPTED",
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: External accepted suppression."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "d51d9197b8a79921:1"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "accepted",
+              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
+            }
+          ]
+        },
+        {
+          "ruleId": "PROBE_SOURCE_ACCEPTED",
+          "ruleIndex": 2,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: In-source accepted suppression."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "d51d9197b8a79921:1"
+          },
+          "suppressions": [
+            {
+              "kind": "inSource",
+              "status": "accepted",
+              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
+            }
+          ]
+        },
+        {
+          "ruleId": "PROBE_EXTERNAL_UNDER_REVIEW",
+          "ruleIndex": 3,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: External pending suppression."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "d51d9197b8a79921:1"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "underReview",
+              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
+            }
+          ]
+        },
+        {
+          "ruleId": "PROBE_EXTERNAL_REJECTED",
+          "ruleIndex": 4,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: External rejected suppression."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "d51d9197b8a79921:1"
+          },
+          "suppressions": [
+            {
+              "kind": "external",
+              "status": "rejected",
+              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
+            }
+          ]
+        },
+        {
+          "ruleId": "PROBE_EXTERNAL_NO_STATUS",
+          "ruleIndex": 5,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: External suppression without status."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primaryLocationLineHash": "d51d9197b8a79921:1"
+          },
+          "suppressions": [
+            {
+              "justification": "Synthetic E2E transport test; this is not a review of an application finding.",
+              "kind": "external"
+            }
+          ]
+        },
+        {
+          "ruleId": "PROBE_UPLOADER_CONTROL",
+          "ruleIndex": 6,
+          "level": "warning",
+          "message": {
+            "text": "SARIF transport test only: Unsuppressed uploader fingerprint control."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/dotnetarium-suppression-probe/Probe.cs",
+                  "uriBaseId": "%SRCROOT%"
+                },
+                "region": {
+                  "startLine": 9,
+                  "startColumn": 9,
+                  "endLine": 9,
+                  "endColumn": 37
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
