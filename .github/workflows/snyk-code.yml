@@ -1,0 +1,128 @@
+name: Snyk Code C# security
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/snyk-code.yml]
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install pinned Snyk CLI
+        run: |
+          npm install --global snyk@1.1308.1
+          snyk --version
+      - name: Stage tracked C# and Razor source with project metadata
+        run: |
+          python3 - <<'PY'
+          import collections, json, os, pathlib, shutil, subprocess
+          root = pathlib.Path(os.environ['GITHUB_WORKSPACE'])
+          target = pathlib.Path(os.environ['RUNNER_TEMP']) / 'snyk-csharp-input'
+          target.mkdir()
+          source_extensions = {'.cs', '.cshtml', '.razor', '.aspx'}
+          metadata_extensions = {'.csproj', '.props', '.targets', '.sln', '.slnx'}
+          counts = collections.Counter()
+          paths = []
+          for raw in subprocess.check_output(['git', 'ls-files', '-z']).split(b'\0'):
+              if not raw:
+                  continue
+              relative = pathlib.Path(os.fsdecode(raw))
+              source = root / relative
+              if source.suffix.lower() not in source_extensions | metadata_extensions and source.name.lower() not in {'global.json', 'nuget.config'}:
+                  continue
+              if not source.is_file():
+                  continue
+              destination = target / relative
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copyfile(source, destination)
+              paths.append(relative.as_posix())
+              counts[source.suffix.lower()] += 1
+          manifest = {'commit': os.environ['GITHUB_SHA'], 'scope': 'tracked C#/Razor, including tests; no JS/TS, SCA or quality scan',
+                      'files_by_extension': dict(counts), 'paths': paths}
+          (root / 'snyk-scope.json').write_text(json.dumps(manifest, indent=2))
+          print(json.dumps({'files_by_extension': dict(counts), 'staged_files': len(paths)}))
+          PY
+      - name: Scan C# security and record elapsed time
+        id: scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_ORG: ${{ vars.SNYK_ORG }}
+        run: |
+          args=(code test "$RUNNER_TEMP/snyk-csharp-input" --severity-threshold=low
+            --sarif-file-output="$GITHUB_WORKSPACE/snyk-code.sarif"
+            --remote-repo-url="https://github.com/$GITHUB_REPOSITORY")
+          if [[ -n "$SNYK_ORG" ]]; then args+=(--org="$SNYK_ORG"); fi
+          started=$(date +%s)
+          set +e
+          snyk "${args[@]}" 2>&1 | tee snyk-code.log
+          scan_exit=${PIPESTATUS[0]}
+          set -e
+          elapsed=$(( $(date +%s) - started ))
+          printf '{"cli_version":"1.1308.1","cli_elapsed_seconds":%s,"scan_exit_code":%s,"timing_scope":"CLI wall time including upload and cloud analysis"}\n' "$elapsed" "$scan_exit" > snyk-timing.json
+          echo "scan-exit=$scan_exit" >> "$GITHUB_OUTPUT"
+          echo "elapsed-seconds=$elapsed" >> "$GITHUB_OUTPUT"
+          if [[ "$scan_exit" -gt 1 ]]; then
+            echo "::error::Snyk Code could not complete; see snyk-code.log."
+          fi
+      - name: Summarize results
+        if: ${{ !cancelled() && steps.scan.outputs.scan-exit != '' }}
+        env:
+          SCAN_EXIT: ${{ steps.scan.outputs.scan-exit }}
+          SCAN_SECONDS: ${{ steps.scan.outputs.elapsed-seconds }}
+        run: |
+          python3 - <<'PY'
+          import collections, json, os, pathlib
+          output = pathlib.Path('snyk-code.sarif')
+          if os.environ['SCAN_EXIT'] == '0' and not output.exists():
+              output.write_text(json.dumps({'version': '2.1.0', 'runs': [{'tool': {'driver': {'name': 'SnykCode'}}, 'results': []}]}))
+          lines = ['## Snyk Code C# security', '', 'CLI: `1.1308.1`',
+                   f"CLI elapsed time: {os.environ['SCAN_SECONDS']} s (includes upload and cloud analysis)",
+                   f"Scanner exit code: {os.environ['SCAN_EXIT']}",
+                   'Scope: tracked C#/Razor, including tests; JS/TS excluded. No dependency or quality scan.', '']
+          if output.exists():
+              report = json.loads(output.read_text())
+              counts = collections.Counter(result.get('ruleId', '(unknown)') for run in report.get('runs', []) for result in run.get('results', []))
+              lines += [f'Findings: {sum(counts.values())}', '', '| Rule | Reports |', '|---|---|']
+              lines += [f'| {rule} | {count} |' for rule, count in counts.most_common()]
+          else:
+              lines += ['No SARIF report produced. This is not a zero-finding result.']
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write('\n'.join(lines) + '\n')
+          PY
+      - name: Upload SARIF to GitHub Code Security
+        if: ${{ !cancelled() && (steps.scan.outputs.scan-exit == '0' || steps.scan.outputs.scan-exit == '1') && hashFiles('snyk-code.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: snyk-code.sarif
+          checkout_path: ${{ runner.temp }}/snyk-csharp-input
+          category: snyk-code-csharp
+          wait-for-processing: true
+      - name: Retain reports, scope and timing
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: snyk-code-csharp
+          path: |
+            snyk-code.sarif
+            snyk-code.log
+            snyk-scope.json
+            snyk-timing.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Fail on scanner errors
+        if: ${{ !cancelled() && steps.scan.outputs.scan-exit != '' && steps.scan.outputs.scan-exit != '0' && steps.scan.outputs.scan-exit != '1' }}
+        run: exit 1
