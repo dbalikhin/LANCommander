@@ -14,7 +14,7 @@ HOST = "https://sonarcloud.io"
 PROJECT = "dbalikhin_LANCommander"
 OUTPUT = pathlib.Path("sonar-artifacts")
 OUTPUT.mkdir(exist_ok=True)
-TOKEN = os.environ["SONAR_TOKEN"]
+TOKEN = os.environ.get("SONAR_TOKEN", "")
 
 
 def api(path, parameters=None, post=False):
@@ -23,7 +23,8 @@ def api(path, parameters=None, post=False):
     if not post and encoded:
         url += "?" + encoded.decode()
     request = urllib.request.Request(url, data=encoded if post else None)
-    request.add_header("Authorization", "Basic " + base64.b64encode((TOKEN + ":").encode()).decode())
+    if TOKEN:
+        request.add_header("Authorization", "Basic " + base64.b64encode((TOKEN + ":").encode()).decode())
     if post:
         request.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
@@ -32,7 +33,9 @@ def api(path, parameters=None, post=False):
             return json.loads(body) if body else {}
     except urllib.error.HTTPError as error:
         # Status and server message are useful; never print request headers or tokens.
-        message = error.read().decode(errors="replace").replace(TOKEN, "[redacted]")
+        message = error.read().decode(errors="replace")
+        if TOKEN:
+            message = message.replace(TOKEN, "[redacted]")
         raise RuntimeError(f"Sonar API {path}: HTTP {error.code}: {message}") from None
 
 
@@ -95,8 +98,11 @@ if sys.argv[1] == "preflight":
     print(f"Project profile: {profile_name}; {len(expected)} active C# security rules, including hotspots.")
     api("autoscan/activation", {"projectKey": PROJECT, "enable": "false"}, post=True)
     print("Authenticated; project-only automatic analysis disabled for CI analysis.")
-elif sys.argv[1] == "collect":
+elif sys.argv[1] in {"collect", "refresh"}:
     task_files = list(pathlib.Path(".sonarqube").rglob("report-task.txt"))
+    if not task_files and (OUTPUT / "report-task.txt").is_file():
+        # Refresh a previously downloaded public-project report without rebuilding.
+        task_files = [OUTPUT / "report-task.txt"]
     if len(task_files) != 1:
         raise RuntimeError(f"Expected one Sonar report-task.txt, found {len(task_files)}.")
     task_text = task_files[0].read_text(encoding="utf-8-sig")
@@ -104,16 +110,36 @@ elif sys.argv[1] == "collect":
     (OUTPUT / "report-task.txt").write_text(task_text, encoding="utf-8")
     deadline = time.monotonic() + 900
     while True:
-        processing = api("ce/task", {"id": task["ceTaskId"]})
+        if sys.argv[1] == "refresh":
+            processing = json.loads((OUTPUT / "server-processing.json").read_text(encoding="utf-8"))
+            latest = api("project_analyses/search", {"project": PROJECT, "ps": 1})["analyses"][0]
+            if latest["key"] != processing["task"]["analysisId"]:
+                raise RuntimeError("Saved report is no longer the latest analysis; refusing to mix results.")
+        else:
+            processing = api("ce/task", {"id": task["ceTaskId"]})
         status = processing["task"]["status"]
         if status not in {"PENDING", "IN_PROGRESS"}:
             break
+        if sys.argv[1] == "refresh":
+            raise RuntimeError("Only completed saved analyses can be refreshed.")
         if time.monotonic() >= deadline:
             raise RuntimeError("Sonar server processing exceeded 15 minutes.")
         time.sleep(10)
     save("server-processing.json", processing)
     if status != "SUCCESS":
         raise RuntimeError(f"Sonar server processing failed: {processing['task'].get('errorMessage', status)}")
+    # CE completion precedes issue-search indexing. Do not export partial results.
+    for attempt in range(24):
+        expected_count = int(api("measures/component", {"component": PROJECT,
+            "metricKeys": "vulnerabilities"})["component"]["measures"][0]["value"])
+        indexed = api("issues/search", {"componentKeys": PROJECT, "types": "VULNERABILITY",
+            "resolved": "false", "ps": 1})
+        indexed_count = indexed.get("paging", {}).get("total", indexed.get("total", 0))
+        if indexed_count == expected_count:
+            break
+        time.sleep(10)
+    else:
+        raise RuntimeError(f"Issue search is incomplete: indexed={indexed_count}, processed={expected_count}.")
     issue_selection = {"componentKeys": PROJECT, "languages": "cs", "resolved": "false"}
     issue_map = {}
     for selection in [{"types": "VULNERABILITY"}, {"impactSoftwareQualities": "SECURITY"}]:
@@ -150,4 +176,4 @@ elif sys.argv[1] == "collect":
         stream.write(text)
     print(json.dumps(summary))
 else:
-    raise RuntimeError("Expected preflight or collect.")
+    raise RuntimeError("Expected preflight, collect, or refresh.")
