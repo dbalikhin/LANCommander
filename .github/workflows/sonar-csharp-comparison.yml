@@ -6,8 +6,8 @@ on:
       mode:
         description: 'Both modes, or a compiled-only rescan without changing automatic-analysis state'
         type: choice
-        options: [both, compiled]
-        default: both
+        options: [compiled, both]
+        default: compiled
 
 permissions:
   contents: read
