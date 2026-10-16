@@ -179,6 +179,7 @@ try:
     if MODE == "preflight":
         configure(False)
     elif MODE.startswith("automatic"):
+        existing_analyses = {item["key"] for item in api("project_analyses/search", {"project": PROJECT, "ps": 10})["analyses"]}
         configure(True)
         start = time.monotonic()
         commit = os.environ.get("SONAR_AUTOMATIC_COMMIT")
@@ -196,7 +197,8 @@ try:
                 raise RuntimeError("Automatic analysis did not publish this commit within 30 minutes; coverage unverified.")
             time.sleep(15)
         export({"analysis": analysis, "method": "Cloud Automatic Analysis; no user build; scanner logs unavailable"},
-            commit, {"automatic_wall_seconds": time.monotonic() - start, "isolated_scanner_seconds": None})
+            commit, {"automatic_wall_seconds": None if analysis["key"] in existing_analyses else time.monotonic() - start,
+                "reused_completed_analysis": analysis["key"] in existing_analyses, "isolated_scanner_seconds": None})
     elif MODE == "collect":
         task_files = list(pathlib.Path(".sonarqube").rglob("report-task.txt"))
         if len(task_files) != 1:
