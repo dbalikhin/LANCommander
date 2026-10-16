@@ -60,7 +60,34 @@ if sys.argv[1] == "preflight":
         raise RuntimeError("Unexpected Sonar organization.")
     save("before-analysis.json", api("measures/component", {
         "component": PROJECT, "metricKeys": "ncloc,ncloc_language_distribution,files,vulnerabilities,security_hotspots"}))
-    save("csharp-profiles.json", api("qualityprofiles/search", {"organization": "dbalikhin", "project": PROJECT, "language": "cs"}))
+    save("before-csharp-profiles.json", api("qualityprofiles/search", {"organization": "dbalikhin", "project": PROJECT, "language": "cs"}))
+    profile_name = "LANCommander C# all security"
+    profiles = api("qualityprofiles/search", {"organization": "dbalikhin", "language": "cs"})["profiles"]
+    profile = next((item for item in profiles if item["name"] == profile_name), None)
+    if profile is None:
+        profile = api("qualityprofiles/create", {
+            "organization": "dbalikhin", "language": "cs", "name": profile_name}, post=True)["profile"]
+    filters = {"organization": "dbalikhin", "languages": "cs", "statuses": "READY,BETA", "is_template": "false"}
+    selections = [{"types": "VULNERABILITY,SECURITY_HOTSPOT"}, {"impactSoftwareQualities": "SECURITY"}]
+    expected = {}
+    for selection in selections:
+        expected.update((rule["key"], rule) for rule in pages("rules/search", {**filters, **selection}, "rules"))
+        result = api("qualityprofiles/activate_rules", {**filters, **selection, "targetKey": profile["key"]}, post=True)
+        if result.get("errors"):
+            raise RuntimeError(f"Rule activation failed: {result['errors']}")
+    active = pages("rules/search", {"organization": "dbalikhin", "qprofile": profile["key"], "activation": "true"}, "rules")
+    active_keys = {rule["key"] for rule in active}
+    if active_keys != set(expected):
+        raise RuntimeError(f"Security profile mismatch: missing={sorted(set(expected) - active_keys)}, extra={sorted(active_keys - set(expected))}")
+    api("qualityprofiles/add_project", {"organization": "dbalikhin", "project": PROJECT,
+        "language": "cs", "qualityProfile": profile_name}, post=True)
+    associated = api("qualityprofiles/search", {"organization": "dbalikhin", "project": PROJECT, "language": "cs"})
+    if not any(item["key"] == profile["key"] for item in associated["profiles"]):
+        raise RuntimeError("Project security profile association was not confirmed.")
+    save("csharp-profiles.json", associated)
+    save("security-rule-manifest.json", {"profile": profile, "rule_count": len(expected),
+        "selection": selections, "statuses": ["READY", "BETA"], "rules": sorted(expected.values(), key=lambda rule: rule["key"])})
+    print(f"Project profile: {profile_name}; {len(expected)} active C# security rules, including hotspots.")
     api("autoscan/activation", {"projectKey": PROJECT, "enable": "false"}, post=True)
     print("Authenticated; project-only automatic analysis disabled for CI analysis.")
 elif sys.argv[1] == "collect":
@@ -82,9 +109,14 @@ elif sys.argv[1] == "collect":
     save("server-processing.json", processing)
     if status != "SUCCESS":
         raise RuntimeError(f"Sonar server processing failed: {processing['task'].get('errorMessage', status)}")
-    issues = pages("issues/search", {"componentKeys": PROJECT, "languages": "cs", "types": "VULNERABILITY", "resolved": "false"}, "issues")
+    issue_selection = {"componentKeys": PROJECT, "languages": "cs", "resolved": "false"}
+    issue_map = {}
+    for selection in [{"types": "VULNERABILITY"}, {"impactSoftwareQualities": "SECURITY"}]:
+        issue_map.update((issue["key"], issue) for issue in pages("issues/search", {**issue_selection, **selection}, "issues"))
+    issues = list(issue_map.values())
     hotspots = pages("hotspots/search", {"projectKey": PROJECT}, "hotspots")
-    save("csharp-vulnerabilities.json", issues)
+    hotspots = [item for item in hotspots if item.get("component", "").lower().endswith((".cs", ".cshtml", ".razor"))]
+    save("csharp-security-issues.json", issues)
     save("security-hotspots.json", hotspots)
     measures = api("measures/component", {"component": PROJECT, "metricKeys": "ncloc,ncloc_language_distribution,files,vulnerabilities,security_hotspots,bugs,code_smells"})
     save("measures.json", measures)
@@ -95,11 +127,12 @@ elif sys.argv[1] == "collect":
     execution_ms = processing["task"].get("executionTimeMs")
     timings["server_execution_seconds"] = execution_ms / 1000 if execution_ms is not None else None
     summary = {"project": PROJECT, "commit": os.environ["GITHUB_SHA"], "scanner_version": "12.0.0",
-               "vulnerability_reports": len(issues), "hotspot_reports": len(hotspots),
-               "vulnerabilities_by_rule": dict(groups), "timings": timings,
-               "scope": "built C# projects; existing security profile; quality findings excluded from comparison"}
+               "security_issue_reports": len(issues), "hotspot_reports": len(hotspots),
+               "security_issues_by_rule": dict(groups), "timings": timings,
+               "active_security_rules": json.loads((OUTPUT / "security-rule-manifest.json").read_text(encoding="utf-8"))["rule_count"],
+               "scope": "full C# solution; all available READY/BETA security rules and hotspots; quality-only findings excluded"}
     save("summary.json", summary)
-    lines = ["## SonarQube Cloud C# security", "", f"Vulnerability reports: {len(issues)}",
+    lines = ["## SonarQube Cloud C# security", "", f"Security issue reports: {len(issues)}",
              f"Security hotspots (review candidates): {len(hotspots)}", "", "| Rule | Reports |", "|---|---:|"]
     lines += [f"| {rule} | {count} |" for rule, count in groups.most_common()]
     lines += ["", "Timing (seconds):", "", "```json", json.dumps(timings, indent=2), "```", "",
