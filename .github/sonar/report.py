@@ -16,7 +16,7 @@ HOST = "https://sonarcloud.io"
 ORG = "dbalikhin"
 PROJECT = os.environ["SONAR_PROJECT_KEY"]
 MODE = sys.argv[1]
-OUTPUT = pathlib.Path("sonar-artifacts") / ("automatic" if MODE.startswith("automatic") else "compiled")
+OUTPUT = pathlib.Path("sonar-artifacts") / ("automatic" if MODE == "automatic" else "compiled")
 OUTPUT.mkdir(parents=True, exist_ok=True)
 TOKEN = os.environ["SONAR_TOKEN"]
 
@@ -162,13 +162,13 @@ def export(processing, commit, timings):
         timings.update(json.loads(item.read_text(encoding="utf-8-sig")))
     languages = dict(part.split("=", 1) for part in values.get("ncloc_language_distribution", "").split(";") if "=" in part)
     count = int(languages.get("cs", 0))
-    summary = {"project": PROJECT, "mode": "automatic" if MODE.startswith("automatic") else "compiled", "commit": commit,
+    summary = {"project": PROJECT, "mode": "automatic" if MODE == "automatic" else "compiled", "commit": commit,
         "csharp_ncloc": count, "security_issue_reports": len(issues), "hotspot_reports": len(hotspots),
         "security_issues_by_rule": dict(collections.Counter(item["rule"] for item in issues)), "timings": timings,
         "active_security_rules": json.loads((OUTPUT / "security-rule-manifest.json").read_text())["rule_count"],
         "coverage_status": "C# analyzed" if count else "No C# measured; incomplete C# coverage", "tp_fp_reviewed": False}
     save("summary.json", summary)
-    text = "## Sonar C# security â€” " + summary["mode"] + "\n\n```json\n" + json.dumps(summary, indent=2) + "\n```\n"
+    text = "## Sonar C# security — " + summary["mode"] + "\n\n```json\n" + json.dumps(summary, indent=2) + "\n```\n"
     (OUTPUT / "summary.md").write_text(text, encoding="utf-8")
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
         stream.write(text)
@@ -178,16 +178,10 @@ def export(processing, commit, timings):
 try:
     if MODE == "preflight":
         configure(False)
-    elif MODE.startswith("automatic"):
-        existing_analyses = {item["key"] for item in api("project_analyses/search", {"project": PROJECT, "ps": 10})["analyses"]}
+    elif MODE == "automatic":
         configure(True)
         start = time.monotonic()
-        commit = os.environ.get("SONAR_AUTOMATIC_COMMIT")
-        if commit:
-            save("trigger.json", {"commit": commit, "source_commit": os.environ["SONAR_SOURCE_COMMIT"]})
-            print("Automatic profile ready; waiting for the specified external trigger commit.", flush=True)
-        else:
-            commit = trigger_automatic()
+        commit = trigger_automatic()
         while True:
             analyses = api("project_analyses/search", {"project": PROJECT, "ps": 10})["analyses"]
             analysis = next((item for item in analyses if item.get("revision") == commit), None)
@@ -197,8 +191,7 @@ try:
                 raise RuntimeError("Automatic analysis did not publish this commit within 30 minutes; coverage unverified.")
             time.sleep(15)
         export({"analysis": analysis, "method": "Cloud Automatic Analysis; no user build; scanner logs unavailable"},
-            commit, {"automatic_wall_seconds": None if analysis["key"] in existing_analyses else time.monotonic() - start,
-                "reused_completed_analysis": analysis["key"] in existing_analyses, "isolated_scanner_seconds": None})
+            commit, {"automatic_wall_seconds": time.monotonic() - start, "isolated_scanner_seconds": None})
     elif MODE == "collect":
         task_files = list(pathlib.Path(".sonarqube").rglob("report-task.txt"))
         if len(task_files) != 1:
