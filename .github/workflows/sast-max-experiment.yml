@@ -1,0 +1,221 @@
+name: One-time maximum C# security experiment
+on:
+  push:
+    branches: [sast-max-20261016]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  codeql:
+    name: CodeQL all security / ${{ matrix.mode }}
+    runs-on: windows-2025
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [none, manual]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PROFILE: codeql-${{ matrix.mode }}-all-security
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Record frozen source and scanner scope
+        run: python .github/sast/evidence.py provenance
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.401
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Restore and prepare build dependencies
+        if: matrix.mode == 'manual'
+        run: .github/sast/build.ps1 -Restore
+      - name: Initialize CodeQL C# and all security queries
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
+        with:
+          languages: csharp
+          build-mode: ${{ matrix.mode }}
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.2/codeql-bundle-win64.tar.gz
+          config-file: ./.github/sast/all-security.yml
+          dependency-caching: false
+      - name: Record resolved security query manifest
+        run: |
+          $candidates = @()
+          if ($env:CODEQL_DIST) { $candidates += Join-Path $env:CODEQL_DIST 'codeql.exe' }
+          $candidates += @(Get-ChildItem $env:RUNNER_TEMP -Filter codeql.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+          $cli = $candidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
+          if ($cli) {
+            & $cli resolve queries .github/sast/all-security.qls --format=json 2> benchmark-evidence/query-resolution.log | Set-Content benchmark-evidence/resolved-queries.json
+            & $cli version --format=json | Set-Content benchmark-evidence/codeql-version.json
+          } else { 'Query manifest unavailable; inspect init logs and SARIF rule metadata.' | Set-Content benchmark-evidence/query-resolution.log }
+      - name: Manual C# build and CodeQL extraction
+        id: build
+        if: matrix.mode == 'manual'
+        continue-on-error: true
+        run: .github/sast/build.ps1
+      - name: Analyze all security queries and save SARIF
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        with:
+          output: results
+          category: /sast-experiment/csharp/${{ matrix.mode }}/all-security
+          upload: false
+          upload-database: false
+      - name: Group findings by rule and location
+        run: python .github/sast/evidence.py group
+      - name: Preserve raw reports and coverage evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: codeql-${{ matrix.mode }}-all-security
+          path: |
+            results/
+            benchmark-evidence/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Mark partial compiled coverage
+        if: steps.build.outcome == 'failure'
+        run: throw 'Build failed; any retained CodeQL findings have partial compilation coverage.'
+  grep:
+    name: Expanded security / ${{ matrix.engine }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [semgrep-ce, opengrep, semgrep-pro]
+    env:
+      ENGINE: ${{ matrix.engine }}
+      PROFILE: ${{ matrix.engine }}-expanded-security
+      SEMGREP_ENABLE_VERSION_CHECK: '0'
+      SEMGREP_SEND_METRICS: 'off'
+      SEMGREP_REPO_NAME: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Record frozen source and scanner scope
+        run: python3 .github/sast/evidence.py provenance
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install scanner and resolve all selected security rules
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: |
+          python -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
+          python .github/sast/grep.py prepare
+      - name: Run maximum selected C# security profile once
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: python .github/sast/grep.py scan
+      - name: Group findings by rule and location
+        if: ${{ !cancelled() }}
+        run: python .github/sast/evidence.py group
+      - name: Preserve raw reports and rule manifests
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ${{ matrix.engine }}-expanded-security
+          path: |
+            results/
+            evidence/
+            benchmark-evidence/
+          retention-days: 14
+          if-no-files-found: error
+  dotnetarium:
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [full, max]
+    name: Dotnetarium 2.7.3 / no-build / ${{ matrix.profile }}
+    runs-on: windows-2025
+    timeout-minutes: 120
+    env:
+      PROFILE: dotnetarium-max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Record frozen source and scanner scope
+        run: python .github/sast/evidence.py provenance
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.401
+      - name: Restore scan dependencies without compilation
+        shell: pwsh
+        run: .github/sast/build.ps1 -Restore
+      - name: Scan with pinned Action and CLI 2.7.3 max profile
+        uses: dotnetarium/dotnetarium-action@3bcd466978becf343999d22df221b96d7f481a33
+        with:
+          target: LANCommander.slnx
+          version: '2.7.3'
+          analysis-profile: ${{ matrix.profile }}
+          setup-dotnet: 'false'
+          restore: 'false'
+          configuration: Release
+          upload-sarif: 'false'
+          respect-editorconfig: 'false'
+          sarif-file: results/dotnetarium.sarif
+      - name: Group findings by rule and location
+        if: ${{ !cancelled() }}
+        run: python .github/sast/evidence.py group
+      - name: Preserve raw reports and scanner metadata
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: dotnetarium-2.7.3-${{ matrix.profile }}
+          path: |
+            results/
+            benchmark-evidence/
+          retention-days: 14
+          if-no-files-found: error
+  snyk:
+    name: Snyk Code / all C# security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PROFILE: snyk-code-all-security
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Record frozen source and stage C# and Razor inputs
+        run: |
+          python3 .github/sast/evidence.py provenance
+          python3 .github/sast/evidence.py stage-snyk
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Install pinned Snyk CLI
+        run: npm install --global snyk@1.1308.1
+      - name: Scan all available C# security checks
+        id: scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_ORG: ${{ vars.SNYK_ORG }}
+        run: |
+          mkdir -p results
+          python3 .github/sast/snyk.py
+      - name: Group findings by rule and location
+        if: ${{ !cancelled() }}
+        run: python3 .github/sast/evidence.py group
+      - name: Preserve raw reports and scope evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: snyk-code-all-security
+          path: |
+            results/
+            benchmark-evidence/
+          retention-days: 14
+          if-no-files-found: error

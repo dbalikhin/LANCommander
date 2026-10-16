@@ -1,0 +1,4 @@
+name: All bundled C# security rules
+disable-default-queries: true
+queries:
+  - uses: ./.github/sast/all-security.qls
