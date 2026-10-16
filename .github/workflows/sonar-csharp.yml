@@ -2,11 +2,6 @@ name: SonarQube Cloud C# security
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/sonar-csharp.yml
-      - .github/sonar/**
 
 permissions:
   contents: read
