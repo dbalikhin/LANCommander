@@ -215,9 +215,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
@@ -242,9 +242,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
@@ -252,14 +252,7 @@
           ],
           "partialFingerprints": {
             "primaryLocationLineHash": "d51d9197b8a79921:1"
-          },
-          "suppressions": [
-            {
-              "kind": "external",
-              "status": "accepted",
-              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
-            }
-          ]
+          }
         },
         {
           "ruleId": "PROBE_SOURCE_ACCEPTED",
@@ -276,9 +269,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
@@ -286,14 +279,7 @@
           ],
           "partialFingerprints": {
             "primaryLocationLineHash": "d51d9197b8a79921:1"
-          },
-          "suppressions": [
-            {
-              "kind": "inSource",
-              "status": "accepted",
-              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
-            }
-          ]
+          }
         },
         {
           "ruleId": "PROBE_EXTERNAL_UNDER_REVIEW",
@@ -310,9 +296,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
@@ -320,14 +306,7 @@
           ],
           "partialFingerprints": {
             "primaryLocationLineHash": "d51d9197b8a79921:1"
-          },
-          "suppressions": [
-            {
-              "kind": "external",
-              "status": "underReview",
-              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
-            }
-          ]
+          }
         },
         {
           "ruleId": "PROBE_EXTERNAL_REJECTED",
@@ -344,9 +323,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
@@ -354,14 +333,7 @@
           ],
           "partialFingerprints": {
             "primaryLocationLineHash": "d51d9197b8a79921:1"
-          },
-          "suppressions": [
-            {
-              "kind": "external",
-              "status": "rejected",
-              "justification": "Synthetic E2E transport test; this is not a review of an application finding."
-            }
-          ]
+          }
         },
         {
           "ruleId": "PROBE_EXTERNAL_NO_STATUS",
@@ -378,9 +350,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
@@ -388,13 +360,7 @@
           ],
           "partialFingerprints": {
             "primaryLocationLineHash": "d51d9197b8a79921:1"
-          },
-          "suppressions": [
-            {
-              "justification": "Synthetic E2E transport test; this is not a review of an application finding.",
-              "kind": "external"
-            }
-          ]
+          }
         },
         {
           "ruleId": "PROBE_UPLOADER_CONTROL",
@@ -411,9 +377,9 @@
                   "uriBaseId": "%SRCROOT%"
                 },
                 "region": {
-                  "startLine": 9,
+                  "startLine": 10,
                   "startColumn": 9,
-                  "endLine": 9,
+                  "endLine": 10,
                   "endColumn": 37
                 }
               }
