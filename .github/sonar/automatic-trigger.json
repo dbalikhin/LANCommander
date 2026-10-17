@@ -1,1 +1,6 @@
-{"run": "38970959304", "attempt": "1", "source_commit": "0344743bddd0c0af176af6bdede0505d3b270c61"}
+{
+  "run": "38998708664",
+  "source_commit": "96e85d6b48227175afca0dd5d4a2cd93849c5385",
+  "experiment": "Sonar automatic C# security with corrected multi-value scope",
+  "generated_at": "2026-10-17T03:26:19.608230+00:00"
+}
